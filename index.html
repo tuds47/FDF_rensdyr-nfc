@@ -56,6 +56,8 @@ ol.deer li.hit{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) ins
 details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
 summary{cursor:pointer;font-weight:600}
 textarea{width:100%;min-height:110px;margin-top:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;font:.8rem var(--mono);padding:8px}
+.ver{text-align:center;font:.72rem var(--mono);color:var(--muted);opacity:.7;padding-top:8px}
+body.playing .ver{color:#8fb1a5}
 .msg{text-align:center;min-height:1.5em;font-weight:600}
 
 /* ---------- Spil: nattehimmel ---------- */
@@ -222,6 +224,7 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
       </div>
     </div>
   </section>
+  <footer class="ver">Version __VERSION__</footer>
 </main>
 
 <script>

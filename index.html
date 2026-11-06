@@ -70,11 +70,6 @@ body.playing::before{content:"";position:fixed;inset:-10% -10% auto;height:70vh;
 @keyframes aurora{0%{transform:translateX(-4%) skewX(-4deg);opacity:.8}100%{transform:translateX(4%) skewX(5deg);opacity:1}}
 #snow{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:none}
 body.playing #snow{display:block}
-.bignum{position:fixed;inset:0;z-index:6;display:grid;place-items:center;pointer-events:none;background:rgba(5,11,18,.55)}
-.bignum div{display:flex;flex-direction:column;align-items:center;gap:.2em;animation:pop 1.3s ease-out both}
-.bignum b{font:800 min(55vw,320px)/.85 var(--revenge);color:var(--gold);text-shadow:0 0 40px rgba(255,201,77,.6)}
-.bignum span{font:700 1.3rem var(--body);letter-spacing:.12em;text-transform:uppercase;color:#fff7d6}
-@keyframes pop{0%{transform:scale(.4);opacity:0}15%{transform:scale(1.08);opacity:1}25%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(1.05)}}
 .red-flash{position:fixed;inset:0;z-index:5;pointer-events:none;background:var(--bad);opacity:0}
 .red-flash.on{animation:redpulse 1.1s ease-out}
 @keyframes redpulse{0%{opacity:0}8%{opacity:.8}25%{opacity:.15}40%{opacity:.65}100%{opacity:0}}
@@ -114,6 +109,9 @@ body.playing #snow{display:block}
 .cell span{font-size:.78rem;color:#cfe0d8;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cell.found{opacity:1;filter:none;--antler:var(--gold)}
 .cell.found span{color:var(--gold);font-weight:700}
+.cell.flash{opacity:1;filter:none;--antler:var(--gold);transform:scale(1.25);z-index:1}
+.cell.flash svg{filter:drop-shadow(0 0 10px rgba(255,201,77,.95)) drop-shadow(0 0 22px rgba(255,201,77,.6))}
+.cell.flash span{color:var(--gold);font-weight:700}
 .cell.next{opacity:.7;filter:grayscale(.6)}
 .cell.next svg{animation:breathe 1.6s ease-in-out infinite}
 
@@ -153,7 +151,6 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
 
 <canvas id="snow" aria-hidden="true"></canvas>
 <div id="redFlash" class="red-flash" aria-hidden="true"></div>
-<div id="bigNum" class="bignum" hidden aria-live="polite"><div><span>Rensdyr nr.</span><b id="bigNumVal">1</b></div></div>
 
 <main>
   <header>
@@ -326,11 +323,10 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
     setTimeout(() => document.body.classList.remove("flash-ok","flash-bad"), kind === "ok" ? 500 : 900);
   }
   function redFlash() { const r = $("redFlash"); r.classList.remove("on"); void r.offsetWidth; r.classList.add("on"); }
-  let numTimer = 0;
-  function showNumber(n) {
-    const o = $("bigNum"); o.hidden = true; void o.offsetWidth;
-    $("bigNumVal").textContent = n; o.hidden = false;
-    clearTimeout(numTimer); numTimer = setTimeout(() => { o.hidden = true; }, 1300);
+  let flashIdx = -1, flashTimer = 0;
+  function lightUp(i) {   // rensdyret i flokken lyser op i 1,3 s
+    flashIdx = i; drawProgress();
+    clearTimeout(flashTimer); flashTimer = setTimeout(() => { flashIdx = -1; drawProgress(); }, 1300);
   }
   const vib = p => { try { navigator.vibrate && navigator.vibrate(p); } catch(e) {} };
 
@@ -408,7 +404,7 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
   }
   function drawProgress() {
     $("progress").innerHTML = deer.map((d, i) => {
-      const cls = i < step ? "found" : (i === step && !finished ? "next" : "");
+      const cls = (i < step ? "found" : (i === step && !finished ? "next" : "")) + (i === flashIdx ? " flash" : "");
       const label = i < step ? esc(d.name) : `nr. ${i+1}`;
       return `<div class="cell ${cls}"><svg viewBox="0 0 200 200" aria-hidden="true"><use href="#deer"/></svg><span>${label}</span></div>`;
     }).join("");
@@ -430,7 +426,7 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
     if (idx === step) {
       step++;
       if (step === deer.length) {
-        finished = true; clearInterval(timer); tick(); showNumber(step);
+        finished = true; clearInterval(timer); tick();
         $("bigText").textContent = "Hævnen er afværget!";
         $("gameMsg").textContent = `I kendte alle ${deer.length} rensdyr på ${fmt(Date.now() - t0)} med ${misses} ${misses === 1 ? "fejl" : "fejl"}.`;
         setStage("win");
@@ -439,7 +435,7 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
       } else {
         $("bigText").textContent = `${deer[idx].name} er fundet!`;
         $("gameMsg").textContent = `Find rensdyr nr. ${step + 1}`;
-        setStage("ok"); quietTick(); vib(30); showNumber(step);
+        setStage("ok"); quietTick(); vib(30);
       }
     } else if (idx < step) {
       $("gameMsg").textContent = `${deer[idx].name} er allerede fundet. Find nr. ${step + 1}.`;
@@ -450,6 +446,7 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
       setStage("bad"); loudAlarm(); redFlash(); vib([400,100,400,100,400]);
     }
     drawProgress();
+    if (idx === step - 1 || (finished && idx === deer.length - 1)) lightUp(idx);
   }
   $("startGame").addEventListener("click", async () => {
     if (deer.length < 2) { $("gameMsg").textContent = "Scan mindst 2 rensdyr under Opsætning først"; return; }

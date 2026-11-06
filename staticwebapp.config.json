@@ -1,5 +1,4 @@
 {
-  "globalHeaders": {
-    "Cache-Control": "no-cache"
-  }
+  "platform": { "apiRuntime": "node:20" },
+  "globalHeaders": { "Cache-Control": "no-cache" }
 }

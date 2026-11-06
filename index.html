@@ -73,8 +73,12 @@ textarea{width:100%;min-height:110px;margin-top:10px;background:var(--bg);color:
 
   <!-- OPSÆTNING -->
   <section id="view-setup" style="display:flex;flex-direction:column;gap:14px">
-    <div id="cfgInfo" class="status">Henter rækkefølge…</div>
-    <p class="sub">Scan rensdyrene ét ad gangen i den rigtige rækkefølge. Du kan omdøbe og flytte dem bagefter. Alt gemmes på telefonen.</p>
+    <div id="cfgInfo" class="status">Henter rækkefølge fra serveren…</div>
+    <div id="pinRow" class="row" hidden>
+      <input id="pin" type="password" inputmode="numeric" placeholder="Opsætningskode" aria-label="Opsætningskode" style="flex:1 1 140px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:1rem">
+      <button id="pinSave" class="btn" style="flex:0 0 auto;width:auto">Gem</button>
+    </div>
+    <p class="sub">Scan rensdyrene ét ad gangen i den rigtige rækkefølge. Du kan omdøbe og flytte dem bagefter. Alt gemmes automatisk på serveren.</p>
     <button id="scanSetup" class="btn">Start scanning</button>
     <div id="setupStatus" class="msg"></div>
     <ol id="deerList" class="deer"></ol>
@@ -118,10 +122,9 @@ textarea{width:100%;min-height:110px;margin-top:10px;background:var(--bg);color:
 (() => {
   const KEY = "rensdyr-nfc-v1";
   const $ = id => document.getElementById(id);
-  let deer = [];          // [{uid, name}] scannet på denne telefon
-  let game = deer;        // rækkefølgen spillet bruger: deer.json hvis den findes
+  let deer = [];          // [{uid, name}] i rigtig rækkefølge; serveren er master
   try { deer = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) {}
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(deer)); } catch(e) {} renderBackup(); };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(deer)); } catch(e) {} renderBackup(); queueSync(); };
 
   /* ---------- NFC ---------- */
   const support = $("support");
@@ -248,7 +251,7 @@ textarea{width:100%;min-height:110px;margin-top:10px;background:var(--bg);color:
   /* ---------- Spil ---------- */
   let step = 0, misses = 0, t0 = 0, timer = null, finished = false, wake = null;
   function drawProgress() {
-    $("progress").innerHTML = game.map((_, i) => `<div class="dot ${i < step ? "done" : ""}">${i+1}</div>`).join("");
+    $("progress").innerHTML = deer.map((_, i) => `<div class="dot ${i < step ? "done" : ""}">${i+1}</div>`).join("");
     $("statMiss").textContent = misses;
   }
   function tick() {
@@ -263,18 +266,18 @@ textarea{width:100%;min-height:110px;margin-top:10px;background:var(--bg);color:
   }
   function onGameRead(uid) {
     if (finished) return;
-    const idx = game.findIndex(d => d.uid === uid);
+    const idx = deer.findIndex(d => d.uid === uid);
     if (idx < 0) { $("gameMsg").textContent = "Det tag hører ikke til posten"; return; }
     if (!t0) { t0 = Date.now(); timer = setInterval(tick, 500); }
     if (idx === step) {
       step++;
-      if (step === game.length) {
+      if (step === deer.length) {
         finished = true; clearInterval(timer); tick();
         $("bigText").textContent = "Rensdyrene er genkendt!";
         $("gameMsg").textContent = "I klarede posten";
         tone([523, 659, 784, 1047], .18, "triangle"); vib([100,60,100,60,300]); flash("ok");
       } else {
-        $("bigText").textContent = `Rigtigt! ${step} af ${game.length}`;
+        $("bigText").textContent = `Rigtigt! ${step} af ${deer.length}`;
         $("gameMsg").textContent = "";
         tone([700, 950]); vib(80); flash("ok");
       }
@@ -289,7 +292,7 @@ textarea{width:100%;min-height:110px;margin-top:10px;background:var(--bg);color:
     drawProgress();
   }
   $("startGame").addEventListener("click", async () => {
-    if (game.length < 2) { $("gameMsg").textContent = ""; $("startGame").textContent = "Scan mindst 2 rensdyr under Opsætning først"; return; }
+    if (deer.length < 2) { $("gameMsg").textContent = ""; $("startGame").textContent = "Scan mindst 2 rensdyr under Opsætning først"; return; }
     audio(); mode = "game";
     if (!(await startReader())) return;
     try { wake = await navigator.wakeLock?.request("screen"); } catch(e) {}
@@ -325,24 +328,57 @@ textarea{width:100%;min-height:110px;margin-top:10px;background:var(--bg);color:
   }
   window.addEventListener("hashchange", route);
 
-  /* ---------- Fast rækkefølge fra deer.json ---------- */
-  function showSource(fromFile) {
-    const txt = fromFile
-      ? `<strong>Fast rækkefølge:</strong> spillet bruger ${game.length} rensdyr fra deer.json på siden. Det, du scanner her, ændrer ikke spillet. Kopiér backup-teksten og send den, hvis rækkefølgen skal opdateres.`
-      : `<strong>Ingen fast rækkefølge endnu.</strong> Spillet bruger rensdyrene, der er scannet på denne telefon. Kopiér backup-teksten og send den, så bliver den gjort fast for alle telefoner.`;
-    $("cfgInfo").innerHTML = txt;
-    $("gameSource").textContent = fromFile ? `${game.length} rensdyr · fast rækkefølge` : `${game.length} rensdyr · fra denne telefon`;
+  /* ---------- Gem på serveren (/api/deer) ---------- */
+  let pin = ""; try { pin = localStorage.getItem(KEY + "-pin") || ""; } catch(e) {}
+  let serverOk = false, syncTimer = null;
+  function setSync(html, warn) { const el = $("cfgInfo"); el.innerHTML = html; el.classList.toggle("warn", !!warn); }
+  function updateSource() {
+    $("gameSource").textContent = serverOk ? `${deer.length} rensdyr · hentet fra serveren` : `${deer.length} rensdyr · kun fra denne telefon`;
   }
-  fetch("deer.json", { cache: "no-store" })
-    .then(r => r.ok ? r.json() : [])
-    .then(list => {
-      if (Array.isArray(list) && list.length >= 2 && list.every(d => d.uid)) {
-        game = list.map((d, i) => ({ uid: String(d.uid).toLowerCase(), name: d.name || `Rensdyr ${i+1}` }));
-        showSource(true);
-      } else showSource(false);
-      drawProgress();
-    })
-    .catch(() => showSource(false));
+  function queueSync() {
+    updateSource();
+    if (!serverOk) return;
+    clearTimeout(syncTimer); setSync("Gemmer…");
+    syncTimer = setTimeout(pushServer, 600);
+  }
+  async function pushServer() {
+    try {
+      const r = await fetch("api/deer", { method: "PUT", headers: { "Content-Type": "application/json", "x-setup-pin": pin }, body: JSON.stringify(deer) });
+      if (r.status === 401) { $("pinRow").hidden = false; setSync("<strong>Skriv opsætningskoden</strong> for at gemme på serveren.", true); return; }
+      if (!r.ok) throw new Error(r.status);
+      $("pinRow").hidden = true;
+      setSync(`<strong>Gemt på serveren.</strong> ${deer.length} rensdyr. Alle telefoner bruger denne rækkefølge.`);
+    } catch (e) {
+      setSync("<strong>Kunne ikke gemme på serveren.</strong> Ændringen ligger kun på denne telefon. Tjek forbindelsen og lav en ændring igen.", true);
+    }
+  }
+  $("pinSave").addEventListener("click", () => {
+    pin = $("pin").value.trim(); try { localStorage.setItem(KEY + "-pin", pin); } catch(e) {}
+    pushServer();
+  });
+  async function loadServer() {
+    try {
+      const r = await fetch("api/deer", { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      const list = await r.json();
+      serverOk = true;
+      if (Array.isArray(list) && list.length) {
+        deer = list.map((d, i) => ({ uid: String(d.uid).toLowerCase(), name: d.name || `Rensdyr ${i+1}` }));
+        try { localStorage.setItem(KEY, JSON.stringify(deer)); } catch(e) {}
+        render(); renderBackup();
+        setSync(`<strong>Hentet fra serveren.</strong> ${deer.length} rensdyr. Ændringer gemmes automatisk for alle telefoner.`);
+      } else if (deer.length) {
+        queueSync();   // serveren er tom: send det, der allerede er scannet på telefonen
+      } else {
+        setSync("<strong>Serveren er tom.</strong> Scan rensdyrene, så gemmes de automatisk.");
+      }
+    } catch (e) {
+      serverOk = false;
+      setSync("<strong>Serveren svarer ikke.</strong> Bruger rensdyrene, der er gemt på denne telefon.", true);
+    }
+    updateSource(); drawProgress();
+  }
+  loadServer();
 
   render(); renderBackup(); route();
 })();

@@ -111,9 +111,14 @@ body.playing #snow{display:block}
 .cell span{font-size:.78rem;color:#cfe0d8;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cell.found{opacity:1;filter:none;--antler:var(--gold)}
 .cell.found span{color:var(--gold);font-weight:700}
-.cell.flash{opacity:1;filter:none;--antler:var(--gold);transform:scale(1.25);z-index:1}
-.cell.flash svg{filter:drop-shadow(0 0 10px rgba(255,201,77,.95)) drop-shadow(0 0 22px rgba(255,201,77,.6))}
-.cell.flash span{color:var(--gold);font-weight:700}
+.cell{position:relative}
+.cell.flash{opacity:1;filter:none;--antler:#fff3b0;--fur:#d9a55a;z-index:2;animation:cellpop 1.3s ease-out both}
+.cell.flash::before{content:"";position:absolute;left:50%;top:38%;width:150%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
+  background:radial-gradient(circle, rgba(255,214,90,.95) 0%, rgba(255,201,77,.55) 35%, rgba(255,201,77,0) 70%);animation:halo 1.3s ease-out both}
+.cell.flash svg{filter:drop-shadow(0 0 6px #fff3b0) drop-shadow(0 0 16px rgba(255,201,77,.9))}
+.cell.flash span{color:#fff3b0;font-weight:800;text-shadow:0 0 8px rgba(255,201,77,.9)}
+@keyframes cellpop{0%{transform:scale(1)}15%{transform:scale(1.55)}35%{transform:scale(1.35)}85%{transform:scale(1.35)}100%{transform:scale(1)}}
+@keyframes halo{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}80%{opacity:.9}100%{opacity:0;transform:translate(-50%,-50%) scale(1)}}
 .cell.next{opacity:.7;filter:grayscale(.6)}
 .cell.next svg{animation:breathe 1.6s ease-in-out infinite}
 
@@ -126,7 +131,7 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
 
 @media (prefers-reduced-motion:reduce){
   body{transition:none}
-  body.playing::before,.stage svg,.cell.next svg,.stage[data-state] svg{animation:none!important}
+  body.playing::before,.stage svg,.cell.flash,.cell.flash::before,.cell.next svg,.stage[data-state] svg{animation:none!important}
 }
 </style>
 </head>
@@ -329,6 +334,8 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
   let flashIdx = -1, flashTimer = 0;
   function lightUp(i) {   // rensdyret i flokken lyser op i 1,3 s
     flashIdx = i; drawProgress();
+    const cell = $("progress").children[i];
+    if (cell) { const r = cell.getBoundingClientRect(); if (r.bottom > innerHeight || r.top < 0) cell.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" }); }
     clearTimeout(flashTimer); flashTimer = setTimeout(() => { flashIdx = -1; drawProgress(); }, 1300);
   }
   const vib = p => { try { navigator.vibrate && navigator.vibrate(p); } catch(e) {} };

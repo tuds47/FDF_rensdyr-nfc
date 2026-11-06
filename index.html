@@ -119,6 +119,11 @@ body.playing #snow{display:block}
 .cell.flash span{color:#fff3b0;font-weight:800;text-shadow:0 0 8px rgba(255,201,77,.9)}
 @keyframes cellpop{0%{transform:scale(1)}15%{transform:scale(1.55)}35%{transform:scale(1.35)}85%{transform:scale(1.35)}100%{transform:scale(1)}}
 @keyframes halo{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}80%{opacity:.9}100%{opacity:0;transform:translate(-50%,-50%) scale(1)}}
+.cell.miss{opacity:.6;filter:grayscale(.3);animation:missfade 2.4s ease-out both}
+.cell.miss::before{content:"";position:absolute;left:50%;top:38%;width:120%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;z-index:-1;
+  background:radial-gradient(circle, rgba(255,90,70,.35) 0%, rgba(255,90,70,0) 65%)}
+.cell.miss span{color:#ffb3a8}
+@keyframes missfade{0%{opacity:.35}45%{opacity:.75}85%{opacity:.65}100%{opacity:.35}}
 .cell.next{opacity:.7;filter:grayscale(.6)}
 .cell.next svg{animation:breathe 1.6s ease-in-out infinite}
 
@@ -331,12 +336,12 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
     setTimeout(() => document.body.classList.remove("flash-ok","flash-bad"), kind === "ok" ? 500 : 900);
   }
   function redFlash() { const r = $("redFlash"); r.classList.remove("on"); void r.offsetWidth; r.classList.add("on"); }
-  let flashIdx = -1, flashTimer = 0;
-  function lightUp(i) {   // rensdyret i flokken lyser op i 1,3 s
-    flashIdx = i; drawProgress();
+  let flashIdx = -1, flashKind = "", flashTimer = 0;
+  function lightUp(i, kind = "flash") {   // rensdyret i flokken lyser op i 1,3 s
+    flashIdx = i; flashKind = kind; drawProgress();
     const cell = $("progress").children[i];
     if (cell) { const r = cell.getBoundingClientRect(); if (r.bottom > innerHeight || r.top < 0) cell.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" }); }
-    clearTimeout(flashTimer); flashTimer = setTimeout(() => { flashIdx = -1; drawProgress(); }, 1300);
+    clearTimeout(flashTimer); flashTimer = setTimeout(() => { flashIdx = -1; drawProgress(); }, kind === "miss" ? 2400 : 1300);
   }
   const vib = p => { try { navigator.vibrate && navigator.vibrate(p); } catch(e) {} };
 
@@ -414,7 +419,7 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
   }
   function drawProgress() {
     $("progress").innerHTML = deer.map((d, i) => {
-      const cls = (i < step ? "found" : (i === step && !finished ? "next" : "")) + (i === flashIdx ? " flash" : "");
+      const cls = (i < step ? "found" : (i === step && !finished ? "next" : "")) + (i === flashIdx ? " " + flashKind : "");
       const label = i < step ? esc(d.name) : `nr. ${i+1}`;
       return `<div class="cell ${cls}"><svg viewBox="0 0 200 200" aria-hidden="true"><use href="#deer"/></svg><span>${label}</span></div>`;
     }).join("");
@@ -457,6 +462,7 @@ body.playing .btn:not(.ghost){background:linear-gradient(#ffd56b,#e9a83b);box-sh
     }
     drawProgress();
     if (idx === step - 1 || (finished && idx === deer.length - 1)) lightUp(idx);
+    else if (step === 0 && misses && idx > 0) lightUp(idx, "miss");   // forkert: vis svagt hvilket nummer det var
   }
   $("startGame").addEventListener("click", async () => {
     if (deer.length < 2) { $("gameMsg").textContent = "Scan mindst 2 rensdyr under Opsætning først"; return; }
